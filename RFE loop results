@@ -1,0 +1,104 @@
+getwd()
+data_dir <- "./RF"
+
+# get a list of RData file names in the directory
+data_files <- list.files(data_dir, pattern = "\\.RData$")
+
+# create an empty list to store the RFE results
+rfe_results <- list()
+
+# loop through each file name and read in the RFE results 
+
+for (i in 1:length(data_files)) {
+  data_file <- file.path(data_dir, data_files[i])
+  load(data_file)
+  rfe_results[[i]] <- rfe_fit
+}
+
+# create an empty data frame to store the results
+results_metric <- data.frame(
+  RMSE = numeric(),
+  R_square = numeric(),
+  MAE = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# loop through each RFE result and extract the values of interest
+for (i in seq_along(rfe_results)) {
+  # extract the RFE results
+  rmse <- mean(rfe_results[[i]]$results$RMSE)
+  r_square <- mean(rfe_results[[i]]$results$Rsquared)
+  mae <- mean(rfe_results[[i]]$results$MAE)
+  
+  # add the results to the data frame
+  results_metric <- rbind(results_metric, data.frame(
+    RMSE = rmse,
+    R_square = r_square,
+    MAE = mae,
+    stringsAsFactors = FALSE
+  ))
+}
+
+# write the results to a CSV file
+write.csv(results_metric, file = "./RFE_results_RF_ARG.csv", row.names = FALSE)
+
+## Opt Variables and importance 
+
+# loop through each RFE result and extract the covariate names and importance rankings
+for (i in seq_along(rfe_results)) {
+  # extract the covariate names and importance rankings
+  covariate_names <- names(rfe_results[[i]]$fit$importance)
+  importance_ranking <- rfe_results[[i]]$fit$importance
+  
+  # sort the importance rankings in descending order
+  sorted_ranking <- sort(importance_ranking, decreasing = TRUE)
+  
+  # create a named vector of the sorted importance rankings
+  named_ranking <- setNames(sorted_ranking, covariate_names)
+  
+  # print the named vector
+  print(named_ranking)
+}
+
+## average
+
+# create an empty list to store the results
+results_vari <- list()
+
+# loop through each RFE result and extract the values of interest
+for (i in seq_along(rfe_results)) {
+  # extract the RFE results
+  optimal_variables <- rfe_results[[i]]$optVariables
+  variable_importance <- rfe_results[[i]]$fit$importance
+  
+  # add the results to the list
+  results_vari[[i]] <- data.frame(
+    Optimal_Variables = optimal_variables,
+    Variable_Importance = variable_importance,
+    stringsAsFactors = FALSE
+  )
+}
+
+# combine all results into a single data frame
+all_results <- do.call(rbind, results_vari)
+
+# calculate the frequency of each variable
+freq_table <- table(all_results$Optimal_Variables)
+
+# sort the frequency table in descending order and select the top 10 most frequent variables
+top_15_vars <- head(sort(freq_table, decreasing = TRUE), 15)
+
+# subset the results to include only the top 10 most frequent variables
+top_15_results <- all_results[all_results$Optimal_Variables %in% names(top_15_vars),]
+
+# calculate the averages of importance for each of the top variables
+top_var_importance <- aggregate(Variable_Importance ~ Optimal_Variables, data = top_15_results, mean)
+
+# calculate the sum of variable importance values
+total_importance <- sum(top_var_importance$Variable_Importance)
+
+# calculate the importance percentage for each variable
+top_var_importance$Importance_Percentage <- top_var_importance$Variable_Importance / total_importance * 100
+
+# order the results by importance percentage in descending order
+top_var_importance <- top_var_importance[order(top_var_importance$Importance_Percentage, decreasing = TRUE),]
